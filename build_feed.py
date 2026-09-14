@@ -116,9 +116,39 @@ def build(xml):
     return number_episodes(xml)
 
 
+def count_items(xml):
+    return len(re.findall(r"<item>", xml))
+
+
 if __name__ == "__main__":
-    out = build(fetch(SOURCE))
     dest = sys.argv[1] if len(sys.argv) > 1 else "feed.xml"
+    out = build(fetch(SOURCE))
+    fresh = count_items(out)
+
+    # Odysee's RSS generator is eventually consistent: a freshly published
+    # claim can appear in the feed, then drop out again for a while (observed
+    # with the series trailer, and confirmed against origin with the CDN cache
+    # bypassed). Rebuilding from one of those thin responses would delete
+    # episodes from the feed Apple reads, and podcast apps handle episodes
+    # vanishing badly. So never let a rebuild shrink the feed: if we got
+    # fewer items than we are already serving, keep what we have and let
+    # the next run try again.
+    try:
+        with open(dest) as f:
+            current = f.read()
+    except FileNotFoundError:
+        current = ""
+
+    if current:
+        have = count_items(current)
+        if fresh < have:
+            print(
+                f"REFUSING to shrink feed: upstream returned {fresh} item(s), "
+                f"currently serving {have}. Keeping existing feed.",
+                file=sys.stderr,
+            )
+            sys.exit(0)
+
     with open(dest, "w") as f:
         f.write(out)
-    print(f"wrote {dest} ({len(out)} bytes)", file=sys.stderr)
+    print(f"wrote {dest} ({len(out)} bytes, {fresh} items)", file=sys.stderr)
