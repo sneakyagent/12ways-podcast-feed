@@ -11,6 +11,8 @@ list untouched, so new Odysee uploads still flow through automatically.
 import re
 import sys
 import urllib.request
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 
 CHANNEL = "@12WaysToStopAging"
 CLAIM = "dc6c797a885e86e9087d8d9c51fa0def8147915c"
@@ -18,6 +20,19 @@ SOURCE = f"https://odysee.com/$/rss/{CHANNEL}:{CLAIM}"
 
 SHOW_TITLE = "12 Ways To Stop Aging"
 ODYSEE_TITLE = f"{SHOW_TITLE} on Odysee"
+
+SEASON = 1
+
+# Odysee emits no season/episode tags, so Apple files everything under
+# "Unknown Season" and never shows episode numbers. This is a numbered
+# 12-part series, so we stamp them ourselves: oldest pubDate is episode 1.
+#
+# That is correct as long as episodes go up in order. If one is ever
+# published out of sequence, pin it here by its Odysee claim id instead
+# and it will win over the chronological numbering.
+EPISODE_OVERRIDES = {
+    # "272ff29bf20bf7655fd82d38dd40558ea5a163d4": 1,
+}
 
 BASE = "https://sneakyagent.github.io/12ways-podcast-feed"
 COVER_URL = f"{BASE}/cover-3000.jpg"
@@ -28,6 +43,35 @@ def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": "12WaysFeedBuild/1.0"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8")
+
+
+def number_episodes(xml):
+    """Add itunes:season/episode/episodeType to each item, oldest first."""
+    items = re.findall(r"<item>.*?</item>", xml, flags=re.S)
+    if not items:
+        return xml
+
+    def pub(it):
+        m = re.search(r"<pubDate>(.*?)</pubDate>", it)
+        return parsedate_to_datetime(m.group(1)) if m else datetime.min
+
+    def claim(it):
+        m = re.search(r"<guid[^>]*>[^<]*:([0-9a-f]{40})</guid>", it)
+        return m.group(1) if m else None
+
+    order = {id(it): n for n, it in enumerate(sorted(items, key=pub), start=1)}
+
+    for it in items:
+        if "<itunes:episode>" in it:
+            continue
+        num = EPISODE_OVERRIDES.get(claim(it), order[id(it)])
+        tags = (
+            f"<itunes:season>{SEASON}</itunes:season>"
+            f"<itunes:episode>{num}</itunes:episode>"
+            f"<itunes:episodeType>full</itunes:episodeType>"
+        )
+        xml = xml.replace(it, it.replace("</item>", tags + "</item>"), 1)
+    return xml
 
 
 def build(xml):
@@ -45,7 +89,9 @@ def build(xml):
     xml = re.sub(r'<atom:link[^>]*rel="self"[^>]*/>',
                  f'<atom:link href="{SELF_URL}" rel="self" type="application/rss+xml"/>',
                  xml)
-    return xml
+
+    # Season/episode numbering, which Odysee never provides.
+    return number_episodes(xml)
 
 
 if __name__ == "__main__":
