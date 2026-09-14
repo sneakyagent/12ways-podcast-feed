@@ -29,4 +29,4 @@ faster, run the workflow by hand from the Actions tab.
 
 ## Changing the artwork
 
-Replace `cover-3000.png` (square, 1400-3000px, PNG or JPEG) and push.
+Replace `cover-3000.jpg` (square, 1400-3000px, PNG or JPEG) and push.

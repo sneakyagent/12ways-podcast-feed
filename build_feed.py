@@ -20,7 +20,7 @@ SHOW_TITLE = "12 Ways To Stop Aging"
 ODYSEE_TITLE = f"{SHOW_TITLE} on Odysee"
 
 BASE = "https://sneakyagent.github.io/12ways-podcast-feed"
-COVER_URL = f"{BASE}/cover-3000.png"
+COVER_URL = f"{BASE}/cover-3000.jpg"
 SELF_URL = f"{BASE}/feed.xml"
 
 
