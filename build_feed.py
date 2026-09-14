@@ -34,6 +34,21 @@ EPISODE_OVERRIDES = {
     # "272ff29bf20bf7655fd82d38dd40558ea5a163d4": 1,
 }
 
+# Trailers must NOT take an episode number, or every real episode after them
+# shifts by one. Anything whose claim id is listed here, or whose title reads
+# like a trailer, is tagged itunes:episodeType=trailer and skipped when
+# numbering. Pin by claim id when you can — the title check is a safety net.
+TRAILER_CLAIMS = set()
+TRAILER_WORDS = ("trailer", "intro to the series", "series intro")
+
+
+def is_trailer(item, claim):
+    if claim in TRAILER_CLAIMS:
+        return True
+    m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, re.S)
+    title = (m.group(1) if m else "").lower()
+    return any(w in title for w in TRAILER_WORDS)
+
 BASE = "https://sneakyagent.github.io/12ways-podcast-feed"
 COVER_URL = f"{BASE}/cover-3000.jpg"
 SELF_URL = f"{BASE}/feed.xml"
@@ -59,17 +74,22 @@ def number_episodes(xml):
         m = re.search(r"<guid[^>]*>[^<]*:([0-9a-f]{40})</guid>", it)
         return m.group(1) if m else None
 
-    order = {id(it): n for n, it in enumerate(sorted(items, key=pub), start=1)}
+    # Trailers are excluded from the sequence so they consume no number.
+    episodes = [it for it in items if not is_trailer(it, claim(it))]
+    order = {id(it): n for n, it in enumerate(sorted(episodes, key=pub), start=1)}
 
     for it in items:
-        if "<itunes:episode>" in it:
+        if "<itunes:episode>" in it or "<itunes:episodeType>" in it:
             continue
-        num = EPISODE_OVERRIDES.get(claim(it), order[id(it)])
-        tags = (
-            f"<itunes:season>{SEASON}</itunes:season>"
-            f"<itunes:episode>{num}</itunes:episode>"
-            f"<itunes:episodeType>full</itunes:episodeType>"
-        )
+        if is_trailer(it, claim(it)):
+            tags = "<itunes:episodeType>trailer</itunes:episodeType>"
+        else:
+            num = EPISODE_OVERRIDES.get(claim(it), order[id(it)])
+            tags = (
+                f"<itunes:season>{SEASON}</itunes:season>"
+                f"<itunes:episode>{num}</itunes:episode>"
+                f"<itunes:episodeType>full</itunes:episodeType>"
+            )
         xml = xml.replace(it, it.replace("</item>", tags + "</item>"), 1)
     return xml
 
