@@ -38,7 +38,9 @@ EPISODE_OVERRIDES = {
 # shifts by one. Anything whose claim id is listed here, or whose title reads
 # like a trailer, is tagged itunes:episodeType=trailer and skipped when
 # numbering. Pin by claim id when you can — the title check is a safety net.
-TRAILER_CLAIMS = set()
+TRAILER_CLAIMS = {
+    "e1cb37c111d9f83ebf892b2d0ec205d6447f20e7",  # 12 Ways To Stop Aging - Series Trailer
+}
 TRAILER_WORDS = ("trailer", "intro to the series", "series intro")
 
 
