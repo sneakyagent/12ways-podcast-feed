@@ -198,6 +198,15 @@ if __name__ == "__main__":
     except FileNotFoundError:
         current = ""
 
+    # Only trust the existing feed if it is actually a feed. A file left
+    # half-merged by git counts both sides' items, which made the guard
+    # below "protect" a broken feed with conflict markers in it and refuse
+    # every clean rebuild.
+    if "<<<<<<<" in current or ">>>>>>>" in current or "<rss" not in current:
+        if current:
+            print("existing feed is corrupt; replacing it", file=sys.stderr)
+        current = ""
+
     if current:
         have = count_items(current)
         if fresh < have:
