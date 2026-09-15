@@ -8,6 +8,7 @@ Apple's 1400px floor. This rewrites just those parts and leaves the episode
 list untouched, so new Odysee uploads still flow through automatically.
 """
 
+import os
 import re
 import sys
 import urllib.request
@@ -43,6 +44,18 @@ TRAILER_CLAIMS = {
 }
 TRAILER_WORDS = ("trailer", "intro to the series", "series intro")
 
+# Odysee serves the raw video at ~0.5 MB/s, so a 27-minute 1.17GB episode
+# takes ~35 minutes to download and cannot stream in real time. Spotify also
+# refuses any feed containing video ("We're unable to accept podcasts with
+# videos"). So each item's enclosure is swapped for an MP3 served from this
+# repo. The video stays on Odysee and is linked from the show notes.
+#
+# Key = Odysee claim id, value = path to the audio in this repo.
+AUDIO_OVERRIDES = {
+    "272ff29bf20bf7655fd82d38dd40558ea5a163d4": "media/ep01.mp3",
+    "e1cb37c111d9f83ebf892b2d0ec205d6447f20e7": "media/trailer.mp3",
+}
+
 
 def is_trailer(item, claim):
     if claim in TRAILER_CLAIMS:
@@ -60,6 +73,26 @@ def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": "12WaysFeedBuild/1.0"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8")
+
+
+def swap_enclosures(xml):
+    """Replace each item's Odysee video enclosure with our hosted MP3."""
+    for claim, path in AUDIO_OVERRIDES.items():
+        if not os.path.exists(path):
+            print(f"WARNING: {path} missing, leaving {claim} on video", file=sys.stderr)
+            continue
+        size = os.path.getsize(path)
+        url = f"{BASE}/{path}"
+        new = f'<enclosure url="{url}" length="{size}" type="audio/mpeg"/>'
+
+        def repl(m, claim=claim, new=new):
+            item = m.group(0)
+            if claim not in item:
+                return item
+            return re.sub(r"<enclosure[^>]*/>", new, item)
+
+        xml = re.sub(r"<item>.*?</item>", repl, xml, flags=re.S)
+    return xml
 
 
 def number_episodes(xml):
@@ -111,6 +144,9 @@ def build(xml):
     xml = re.sub(r'<atom:link[^>]*rel="self"[^>]*/>',
                  f'<atom:link href="{SELF_URL}" rel="self" type="application/rss+xml"/>',
                  xml)
+
+    # Swap video enclosures for hosted audio.
+    xml = swap_enclosures(xml)
 
     # Season/episode numbering, which Odysee never provides.
     return number_episodes(xml)
