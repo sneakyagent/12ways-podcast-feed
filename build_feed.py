@@ -129,6 +129,26 @@ def number_episodes(xml):
     return xml
 
 
+def strip_html_breaks(xml):
+    """Turn Odysee's literal <br /> tags into real line breaks.
+
+    Odysee writes HTML into the description. Apple parses it, but Spotify
+    renders it verbatim -- readers saw "...than they are?<br>How some 80
+    year old..." in the show preview. Convert the breaks to newlines and
+    drop the inline thumbnail <img>, which has no place in show notes.
+    """
+    def fix(m):
+        body = m.group(1)
+        body = re.sub(r"<img[^>]*/?>", "", body)
+        body = re.sub(r"<br\s*/?>", "\n", body, flags=re.I)
+        body = re.sub(r"</?p[^>]*>", "\n", body, flags=re.I)
+        body = re.sub(r"\n{3,}", "\n\n", body)
+        return f"<description><![CDATA[{body.strip()}]]></description>"
+
+    return re.sub(r"<description><!\[CDATA\[(.*?)\]\]></description>",
+                  fix, xml, flags=re.S)
+
+
 def build(xml):
     # Title, in both the CDATA and plain forms Odysee emits.
     xml = xml.replace(f"<![CDATA[{ODYSEE_TITLE}]]>", f"<![CDATA[{SHOW_TITLE}]]>")
@@ -144,6 +164,9 @@ def build(xml):
     xml = re.sub(r'<atom:link[^>]*rel="self"[^>]*/>',
                  f'<atom:link href="{SELF_URL}" rel="self" type="application/rss+xml"/>',
                  xml)
+
+    # Odysee writes HTML into descriptions; Spotify renders it literally.
+    xml = strip_html_breaks(xml)
 
     # Swap video enclosures for hosted audio.
     xml = swap_enclosures(xml)
