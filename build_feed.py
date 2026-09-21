@@ -9,8 +9,10 @@ list untouched, so new Odysee uploads still flow through automatically.
 """
 
 import os
+import random
 import re
 import sys
+import time
 import urllib.request
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -54,6 +56,7 @@ TRAILER_WORDS = ("trailer", "intro to the series", "series intro")
 AUDIO_OVERRIDES = {
     "272ff29bf20bf7655fd82d38dd40558ea5a163d4": "media/ep01.mp3",
     "e1cb37c111d9f83ebf892b2d0ec205d6447f20e7": "media/trailer.mp3",
+    "8ee204b2dc7a0b4771f33056b2448af47af913b8": "media/ep02.mp3",
 }
 
 
@@ -70,7 +73,16 @@ SELF_URL = f"{BASE}/feed.xml"
 
 
 def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "12WaysFeedBuild/1.0"})
+    # Odysee's RSS sits behind a Cloudflare cache with a 1 hour TTL, so the
+    # plain URL can serve a copy that predates a just-published episode --
+    # observed serving 2 items while the origin had 3. A unique query string
+    # makes it a cache MISS so we always build from what Odysee actually has.
+    sep = "&" if "?" in url else "?"
+    url = f"{url}{sep}cb={int(time.time())}-{random.randint(1000, 9999)}"
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "12WaysFeedBuild/1.0", "Cache-Control": "no-cache"},
+    )
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8")
 
