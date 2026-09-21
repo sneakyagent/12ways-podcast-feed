@@ -75,6 +75,26 @@ def fetch(url):
         return r.read().decode("utf-8")
 
 
+def drop_unmapped_items(xml):
+    """Remove items we have no audio for.
+
+    A new Odysee upload appears in the feed with a video enclosure. Spotify
+    rejects any feed containing video, and Apple cannot stream 1GB+ off
+    Odysee, so letting one through would break both. Until its MP3 is added
+    to AUDIO_OVERRIDES an item is simply held back.
+    """
+    def keep(m):
+        item = m.group(0)
+        if any(c in item for c in AUDIO_OVERRIDES):
+            return item
+        t = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, re.S)
+        print(f"HOLDING BACK (no audio yet): {(t.group(1) if t else '?')[:60]}",
+              file=sys.stderr)
+        return ""
+
+    return re.sub(r"<item>.*?</item>", keep, xml, flags=re.S)
+
+
 def swap_enclosures(xml):
     """Replace each item's Odysee video enclosure with our hosted MP3."""
     for claim, path in AUDIO_OVERRIDES.items():
@@ -168,7 +188,8 @@ def build(xml):
     # Odysee writes HTML into descriptions; Spotify renders it literally.
     xml = strip_html_breaks(xml)
 
-    # Swap video enclosures for hosted audio.
+    # Hold back anything we have no audio for, then swap the rest.
+    xml = drop_unmapped_items(xml)
     xml = swap_enclosures(xml)
 
     # Season/episode numbering, which Odysee never provides.
